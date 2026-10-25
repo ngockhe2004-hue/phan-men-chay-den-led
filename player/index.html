@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="LED Digital Signage Player - Standalone Web Player for Android TV Box and LED Controllers" />
+  <title>LED Player — Digital Signage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="player.css" />
+</head>
+<body>
+
+<!-- ============================================================
+     PAIRING & LOGIN SCREEN
+     ============================================================ -->
+<div id="pairing-screen">
+  <div class="pairing-container">
+
+    <!-- Logo & Title -->
+    <div class="pairing-logo">
+      <div class="pairing-logo-icon">
+        <svg viewBox="0 0 24 24">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+          <polygon points="10,8 16,11 10,14" style="fill:white;stroke:none"/>
+        </svg>
+      </div>
+      <div class="pairing-logo-text">
+        <h1>LED Signage Player</h1>
+        <p id="pairing-subtitle">Đăng nhập tài khoản CMS để xác nhận & kích hoạt thiết bị</p>
+      </div>
+    </div>
+
+    <!-- ================= BƯỚC 1: ĐĂNG NHẬP ================= -->
+    <div id="step-login" class="step-panel">
+      <!-- SERVER URL -->
+      <label class="pairing-label" for="input-server">Địa chỉ Server CMS</label>
+      <input
+        class="pairing-input"
+        id="input-server"
+        type="url"
+        placeholder="http://localhost:5000"
+        autocomplete="url"
+        spellcheck="false"
+      />
+
+      <!-- EMAIL / USERNAME -->
+      <label class="pairing-label" for="input-email">Tài Khoản / Email CMS</label>
+      <input
+        class="pairing-input"
+        id="input-email"
+        type="email"
+        placeholder="admin@led.vn"
+        autocomplete="email"
+        spellcheck="false"
+      />
+
+      <!-- PASSWORD -->
+      <label class="pairing-label" for="input-password">Mật Khẩu</label>
+      <input
+        class="pairing-input"
+        id="input-password"
+        type="password"
+        placeholder="••••••••"
+        autocomplete="current-password"
+      />
+
+      <!-- LOGIN BUTTON -->
+      <button class="pairing-btn" id="btn-login" type="button">
+        <svg viewBox="0 0 24 24">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+          <polyline points="10 17 15 12 10 7"/>
+          <line x1="15" y1="12" x2="3" y2="12"/>
+        </svg>
+        Đăng Nhập & Kích Hoạt Thiết Bị
+      </button>
+
+      <!-- Status Message -->
+      <div class="pairing-status" id="pairing-status">
+        <span id="pairing-status-text"></span>
+      </div>
+
+      <!-- Divider -->
+      <div class="pairing-divider">
+        <span>Hoặc</span>
+      </div>
+
+      <!-- LOCAL MODE BUTTON -->
+      <button class="pairing-local-btn" id="btn-local-mode" type="button">
+        <svg viewBox="0 0 24 24">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+        Dùng Chế Độ Local (Đọc Trực Tiếp CMS)
+      </button>
+    </div>
+
+    <!-- ================= BƯỚC 2: MÃ THIẾT BỊ & XÁC NHẬN ĐỔI TÊN ================= -->
+    <div id="step-confirm" class="step-panel" style="display:none;">
+      
+      <!-- User logged badge -->
+      <div class="user-badge">
+        <span class="user-badge-dot"></span>
+        <span id="user-badge-name">Đã đăng nhập: Admin</span>
+      </div>
+
+      <!-- DEVICE PAIRING CODE CARD -->
+      <div class="device-code-card">
+        <div class="device-code-label">MÃ THIẾT BỊ HIỂN THỊ (PAIRING CODE)</div>
+        <div class="device-code-display" id="device-code-display">LED-8829</div>
+        <div class="device-code-hint">✨ Màn hình đã tạo mã thiết bị độc bản và được kích hoạt!</div>
+      </div>
+
+      <!-- CONFIRMATION / RENAME FORM -->
+      <div class="confirm-form">
+        <label class="pairing-label" for="input-screen-name">Tên Màn Hình / Thiết Bị</label>
+        <input
+          class="pairing-input"
+          id="input-screen-name"
+          type="text"
+          placeholder="VD: Màn Hình LED Sảnh A"
+          autocomplete="off"
+        />
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px;">
+          <div>
+            <label class="pairing-label" for="select-screen-group">Nhóm Màn Hình</label>
+            <select class="pairing-select" id="select-screen-group">
+              <option value="Sảnh Đón Tiếp">Sảnh Đón Tiếp</option>
+              <option value="Quảng Cáo Ngoài Trời">Quảng Cáo Ngoài Trời</option>
+              <option value="Hội Trường & Phòng Họp">Hội Trường & Phòng Họp</option>
+              <option value="Kiosk Thông Tin">Kiosk Thông Tin</option>
+              <option value="Tiện Ích Nội Bộ">Tiện Ích Nội Bộ</option>
+            </select>
+          </div>
+          <div>
+            <label class="pairing-label" for="input-screen-location">Vị Trí Cụ Thể</label>
+            <input
+              class="pairing-input"
+              id="input-screen-location"
+              type="text"
+              placeholder="VD: Tầng 1 - Sảnh Chính"
+            />
+          </div>
+        </div>
+
+        <button class="pairing-btn" id="btn-confirm-device" type="button" style="margin-top:16px;">
+          <svg viewBox="0 0 24 24">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Xác Nhận Đăng Ký & Bắt Đầu Phát
+        </button>
+
+        <button class="pairing-secondary-btn" id="btn-logout" type="button">
+          Đăng Xuất / Đổi Tài Khoản
+        </button>
+      </div>
+
+      <!-- Status Message for Confirm Step -->
+      <div class="pairing-status" id="confirm-status">
+        <span id="confirm-status-text"></span>
+      </div>
+
+    </div>
+
+    <!-- Hint -->
+    <p style="margin-top:16px;font-size:11px;color:#334155;text-align:center;line-height:1.6;">
+      💡 Đăng nhập thành công sẽ hiện mã thiết bị độc bản và xác nhận đổi tên.<br/>
+      Nhấn <strong style="color:#475569;">ESC</strong> để xem/sửa cấu hình. <strong style="color:#475569;">H</strong> để ẩn/hiện thanh HUD.
+    </p>
+
+  </div>
+</div>
+
+<!-- ============================================================
+     PLAYER SCREEN
+     ============================================================ -->
+<div id="player-screen">
+
+  <!-- Zone Container (all layout zones rendered here dynamically) -->
+  <div id="zones-container" style="position:absolute;inset:0;"></div>
+
+  <!-- Emergency Overlay -->
+  <div id="emergency-overlay">
+    <div class="emergency-icon">
+      <svg viewBox="0 0 24 24">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    </div>
+    <div class="emergency-title">⚠ THÔNG BÁO KHẨN CẤP</div>
+    <div class="emergency-message" id="emergency-msg">Đang phát thông báo khẩn cấp...</div>
+  </div>
+
+  <!-- Screen Off Overlay -->
+  <div id="screen-off-overlay">
+    <div class="screen-off-dot"></div>
+    <div class="screen-off-label" id="screen-off-label">MÀN HÌNH ĐANG TẮT (OFF)</div>
+  </div>
+
+  <!-- Status HUD Bar (bottom) -->
+  <div id="status-hud">
+    <div class="hud-item">
+      <div class="hud-dot online" id="hud-dot"></div>
+      <span id="hud-status">Đang kết nối...</span>
+    </div>
+
+    <div class="hud-item">
+      <svg viewBox="0 0 24 24">
+        <rect x="2" y="3" width="20" height="14" rx="2"/>
+        <line x1="8" y1="21" x2="16" y2="21"/>
+        <line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>
+      <span id="hud-code">---</span>
+    </div>
+
+    <div class="hud-center">
+      <span id="hud-layout">Chưa có bố cục</span>
+    </div>
+
+    <div class="hud-item">
+      <svg viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+      <span id="hud-time">00:00:00</span>
+    </div>
+
+    <div class="hud-item" style="color:#334155;">
+      LED Player v1.0
+    </div>
+  </div>
+
+</div>
+
+<script src="player.js"></script>
+</body>
+</html>

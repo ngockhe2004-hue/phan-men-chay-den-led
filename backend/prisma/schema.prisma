@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Users & Auth
+// ─────────────────────────────────────────────
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  password     String
+  name         String
+  role         Role     @default(OPERATOR)
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────
+// Screens (Màn hình LED)
+// ─────────────────────────────────────────────
+model Screen {
+  id              String   @id @default(cuid())
+  name            String
+  code            String   @unique
+  resolutionWidth Int      @default(1920)
+  resolutionHeight Int     @default(1080)
+  orientation     String   @default("landscape")
+  location        String   @default("")
+  group           String   @default("Chung")
+  status          String   @default("offline")  // online | offline | warning
+  lastPing        String?
+  ipAddress       String?
+  currentLayoutId String?
+  volume          Int      @default(80)
+  isMuted         Boolean  @default(false)
+  powerState      String   @default("on")       // on | sleep | off
+  screenshotUrl   String?
+  appVersion      String   @default("v1.0.0")
+  deviceModel     String   @default("Unknown")
+  storageUsed     Float    @default(0)
+  storageTotal    Float    @default(32)
+  imageScaleMode  String   @default("fit_device") // fit_device | fit_image
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("screens")
+}
+
+// ─────────────────────────────────────────────
+// Media Library (Thư viện media)
+// ─────────────────────────────────────────────
+model MediaItem {
+  id          String   @id @default(cuid())
+  title       String
+  type        String                            // video | image | ticker | widget | webpage
+  url         String
+  thumbnail   String?
+  duration    Int      @default(15)             // seconds
+  sizeBytes   BigInt?
+  sizeLabel   String?                           // "4.2 MB"
+  resolution  String?                           // "1920x1080"
+  mimeType    String?
+  storagePath String?                           // path in MinIO
+  uploadedAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tags        String[]
+
+  @@map("media_items")
+}
+
+// ─────────────────────────────────────────────
+// Layouts (Bố cục hiển thị)
+// ─────────────────────────────────────────────
+model LayoutTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  width       Int      @default(1920)
+  height      Int      @default(1080)
+  zones       Json     @default("[]")           // LayoutZone[]
+  thumbnailUrl String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("layout_templates")
+}
+
+// ─────────────────────────────────────────────
+// Schedules (Lịch phát sóng)
+// ─────────────────────────────────────────────
+model Schedule {
+  id          String   @id @default(cuid())
+  name        String
+  screenIds   String[]
+  layoutId    String
+  priority    String   @default("normal")       // normal | high | emergency
+  repeatType  String   @default("daily")        // always | daily | weekly | date_range
+  startDate   String
+  endDate     String
+  startTime   String                            // "08:00"
+  endTime     String                            // "22:00"
+  daysOfWeek  Int[]                             // 0=Sun, 1=Mon...6=Sat
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("schedules")
+}
+
+// ─────────────────────────────────────────────
+// Proof of Play Logs (Nhật ký phát sóng)
+// ─────────────────────────────────────────────
+model ProofOfPlayLog {
+  id              String   @id @default(cuid())
+  screenId        String
+  screenName      String
+  mediaId         String
+  mediaTitle      String
+  mediaType       String?
+  playedAt        DateTime @default(now())
+  durationSeconds Int
+  status          String   @default("completed") // completed | interrupted
+
+  @@index([screenId])
+  @@index([playedAt])
+  @@map("proof_of_play_logs")
+}
+
+// ─────────────────────────────────────────────
+// Audit Log (Lịch sử thao tác)
+// ─────────────────────────────────────────────
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  userName   String?
+  action     String                            // CREATE | UPDATE | DELETE | LOGIN | COMMAND
+  entity     String                            // screen | media | layout | schedule
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
