@@ -26,7 +26,8 @@ import {
   Pause,
   ArrowRight,
   Maximize,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ImageOff
 } from 'lucide-react';
 import { Screen, LayoutTemplate, LayoutZone, MediaItem, ImageScaleMode } from '../types';
 import { storageService, EmergencyState } from '../services/storage';
@@ -85,7 +86,16 @@ export const PlayerSimulatorView: React.FC<PlayerSimulatorViewProps> = ({ initia
 
   const currentScreen = screens.find(s => s.id === selectedScreenId) || screens[0];
   const containerRef = useRef<HTMLDivElement>(null);
-  const mediaList = storageService.getMedia();
+  const [mediaList, setMediaList] = useState<MediaItem[]>(storageService.getMedia());
+
+  // Reactive: cập nhật danh sách media và screens khi có thay đổi (xoá / thêm / đổi layout)
+  useEffect(() => {
+    const update = () => {
+      setScreens(storageService.getScreens());
+      setMediaList(storageService.getMedia());
+    };
+    return storageService.subscribe(update);
+  }, []);
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
@@ -253,6 +263,21 @@ export const PlayerSimulatorView: React.FC<PlayerSimulatorViewProps> = ({ initia
           {screens.map(s => {
             const isSelected = s.id === currentScreen.id;
             const isLandscape = s.orientation === 'landscape';
+
+            // Tính ảnh "tiếp theo" để hiển thị trong thumbnail của thiết bị
+            const layouts = storageService.getLayouts();
+            const screenLayout = layouts.find(l => l.id === s.currentLayoutId) || layouts[0];
+            const firstZone = screenLayout?.zones.find(z => z.type === 'video' || z.type === 'image_slider');
+            const enabledItems = (firstZone?.mediaPlaylist || []).filter(p => p.enabled !== false);
+            const assignedForPreview = enabledItems
+              .map(p => mediaList.find(m => m.id === p.mediaId))
+              .filter(Boolean) as MediaItem[];
+            const isConfigured = firstZone ? Array.isArray(firstZone.mediaPlaylist) : false;
+            const fallbackForPreview = isConfigured ? [] : mediaList.filter(m => m.type === (firstZone?.type === 'video' ? 'video' : 'image'));
+            const previewPlaylist = assignedForPreview.length > 0 ? assignedForPreview : (isConfigured ? [] : fallbackForPreview);
+            // Hiển thị ảnh kế tiếp (index 1 nếu có, hoặc index 0 nếu chỉ có 1 ảnh)
+            const nextPreviewItem = previewPlaylist.length > 1 ? previewPlaylist[1] : (previewPlaylist.length === 1 ? previewPlaylist[0] : null);
+
             return (
               <button
                 key={s.id}
@@ -279,6 +304,22 @@ export const PlayerSimulatorView: React.FC<PlayerSimulatorViewProps> = ({ initia
                       : 'bg-amber-400'
                   }`} />
                 </div>
+
+                {/* Ảnh xem trước: hiển thị hình TIẾP THEO sẽ phát trên thiết bị */}
+                {nextPreviewItem && (
+                  <div className="relative w-full rounded-lg overflow-hidden bg-slate-950 border border-slate-800" style={{ aspectRatio: isLandscape ? '16/9' : '9/16', maxHeight: '52px' }}>
+                    <img
+                      src={nextPreviewItem.thumbnail || nextPreviewItem.url}
+                      alt={nextPreviewItem.title}
+                      className="w-full h-full object-cover"
+                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=400&q=60'; }}
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-cyan-300 font-bold px-1 py-0.5 truncate flex items-center space-x-0.5">
+                      <ArrowRight className="w-2 h-2 shrink-0" />
+                      <span className="truncate">{nextPreviewItem.title}</span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="min-w-0">
                   <h4 className={`text-xs font-bold truncate ${isSelected ? 'text-cyan-300' : 'text-white'}`}>
@@ -464,6 +505,66 @@ const SingleScreenPlayerContent: React.FC<SingleScreenPlayerContentProps> = ({
   const layouts = storageService.getLayouts();
   const layout = layouts.find(l => l.id === screen.currentLayoutId) || layouts[0];
 
+  // 1. Phân loại media zones trong layout
+  // Sắp xếp theo diện tích giảm dần: zone lớn nhất là HÌNH LỚN (primaryZone), zone nhỏ hơn tiếp theo là HÌNH NHỎ (secondaryZone)
+  const mediaZones = layout ? layout.zones.filter(z => z.type === 'video' || z.type === 'image_slider') : [];
+  const sortedMediaZones = [...mediaZones].sort((a, b) => (b.width * b.height) - (a.width * a.height));
+  const primaryZone = sortedMediaZones[0] || null;
+  const secondaryZone = sortedMediaZones.length > 1 ? sortedMediaZones[1] : null;
+
+  // Lấy danh sách media của hình lớn (primaryZone)
+  const primaryEnabled = (primaryZone?.mediaPlaylist || []).filter(p => p.enabled !== false);
+  const primaryAssigned = primaryEnabled
+    .map(p => mediaList.find(m => m.id === p.mediaId))
+    .filter(Boolean) as MediaItem[];
+
+  // Chỉ fallback nếu zone.mediaPlaylist chưa từng được gán (undefined)
+  // Nếu đã được gán mảng (kể cả rỗng [] khi người dùng xoá hết hình trong thiết bị), tuyệt đối KHÔNG fallback sang mediaList
+  const isPrimaryConfigured = primaryZone ? Array.isArray(primaryZone.mediaPlaylist) : false;
+  const primaryFallback = isPrimaryConfigured ? [] : mediaList.filter(m => m.type === (primaryZone?.type === 'video' ? 'video' : 'image'));
+  const primaryPlaylist = primaryAssigned.length > 0 ? primaryAssigned : (isPrimaryConfigured ? [] : primaryFallback);
+
+  const [masterSlideIndex, setMasterSlideIndex] = useState(0);
+  const [transitionKey, setTransitionKey] = useState(0);
+
+  const safeMasterIndex = primaryPlaylist.length > 0
+    ? (masterSlideIndex % primaryPlaylist.length)
+    : 0;
+
+  const currentMediaDuration = (primaryEnabled[safeMasterIndex]?.duration || primaryPlaylist[safeMasterIndex]?.duration || 10);
+
+  // Reset index khi danh sách thay đổi (xoá / thêm)
+  useEffect(() => {
+    setMasterSlideIndex(0);
+  }, [primaryPlaylist.length]);
+
+  // Tự động chuyển slide: Hình lớn và Hình nhỏ chuyển đồng bộ cùng lúc
+  useEffect(() => {
+    if (primaryPlaylist.length > 1) {
+      const interval = setInterval(() => {
+        setMasterSlideIndex(prev => (prev + 1) % primaryPlaylist.length);
+        setTransitionKey(k => k + 1);
+      }, currentMediaDuration * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [primaryPlaylist.length, safeMasterIndex, currentMediaDuration]);
+
+  const handleMasterNext = (e?: React.SyntheticEvent) => {
+    e?.stopPropagation?.();
+    if (primaryPlaylist.length > 1) {
+      setMasterSlideIndex(prev => (prev + 1) % primaryPlaylist.length);
+      setTransitionKey(k => k + 1);
+    }
+  };
+
+  const handleMasterPrev = (e?: React.SyntheticEvent) => {
+    e?.stopPropagation?.();
+    if (primaryPlaylist.length > 1) {
+      setMasterSlideIndex(prev => (prev - 1 + primaryPlaylist.length) % primaryPlaylist.length);
+      setTransitionKey(k => k + 1);
+    }
+  };
+
   // Nếu màn hình bị tắt
   if (screen.powerState !== 'on') {
     return (
@@ -496,22 +597,80 @@ const SingleScreenPlayerContent: React.FC<SingleScreenPlayerContentProps> = ({
     );
   }
 
+  // Cử chỉ vuốt màn hình cảm ứng để chuyển ảnh
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    touchStartRef.current = { x: clientX, y: clientY };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
+    if (!touchStartRef.current) return;
+    const clientX = 'changedTouches' in e ? e.changedTouches[0].clientX : e.clientX;
+    const clientY = 'changedTouches' in e ? e.changedTouches[0].clientY : e.clientY;
+    const diffX = clientX - touchStartRef.current.x;
+    const diffY = clientY - touchStartRef.current.y;
+    touchStartRef.current = null;
+
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 40) {
+      if (diffX < 0) {
+        // Vuốt sang trái -> Ảnh tiếp theo
+        handleMasterNext();
+      } else {
+        // Vuốt sang phải -> Ảnh trước
+        handleMasterPrev();
+      }
+    }
+  };
+
   // Render chuẩn các Zone theo Bố Cục của màn hình
   if (layout) {
     return (
-      <div className="relative w-full h-full overflow-hidden bg-slate-950">
-        {layout.zones.map((zone) => (
-          <InteractivePlayerZone
-            key={zone.id}
-            zone={zone}
-            mediaList={mediaList}
-            currentTime={currentTime}
-            screenVolume={screen.isMuted ? 0 : screen.volume}
-            transitionEffect={transitionEffect}
-            screenScaleMode={screen.imageScaleMode || 'fit_device'}
-            isCompact={isCompact}
-          />
-        ))}
+      <div 
+        className="relative w-full h-full overflow-hidden bg-slate-950 cursor-grab active:cursor-grabbing select-none"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleTouchStart}
+        onMouseUp={handleTouchEnd}
+      >
+        {layout.zones.map((zone) => {
+          const isPrimary = zone.id === primaryZone?.id;
+          const isSecondary = secondaryZone && zone.id === secondaryZone.id;
+
+          let overridePlaylist: MediaItem[] | undefined = undefined;
+          let overrideSlideIndex: number | undefined = undefined;
+
+          if (isPrimary) {
+            overridePlaylist = primaryPlaylist;
+            overrideSlideIndex = safeMasterIndex;
+          } else if (isSecondary) {
+            // HÌNH NHỎ HIỂN THỊ HÌNH TIẾP THEO CỦA HÌNH LỚN
+            overridePlaylist = primaryPlaylist;
+            overrideSlideIndex = primaryPlaylist.length > 0 ? ((safeMasterIndex + 1) % primaryPlaylist.length) : 0;
+          }
+
+          return (
+            <InteractivePlayerZone
+              key={zone.id}
+              zone={zone}
+              mediaList={mediaList}
+              currentTime={currentTime}
+              screenVolume={screen.isMuted ? 0 : screen.volume}
+              transitionEffect={transitionEffect}
+              screenScaleMode={screen.imageScaleMode || 'fit_device'}
+              isCompact={isCompact}
+              overridePlaylist={overridePlaylist}
+              overrideSlideIndex={overrideSlideIndex}
+              overrideTransitionKey={transitionKey}
+              isPrimaryZone={isPrimary}
+              isSecondaryZone={Boolean(isSecondary)}
+              onNextSlide={handleMasterNext}
+              onPrevSlide={handleMasterPrev}
+            />
+          );
+        })}
 
         {/* Small watermark tag when not in fullscreen */}
         {!isFullscreen && !isCompact && (
@@ -542,6 +701,13 @@ interface InteractivePlayerZoneProps {
   transitionEffect: TransitionEffect;
   screenScaleMode: ImageScaleMode;
   isCompact?: boolean;
+  overridePlaylist?: MediaItem[];
+  overrideSlideIndex?: number;
+  overrideTransitionKey?: number;
+  isPrimaryZone?: boolean;
+  isSecondaryZone?: boolean;
+  onNextSlide?: (e?: React.SyntheticEvent) => void;
+  onPrevSlide?: (e?: React.SyntheticEvent) => void;
 }
 
 const InteractivePlayerZone: React.FC<InteractivePlayerZoneProps> = ({
@@ -551,10 +717,16 @@ const InteractivePlayerZone: React.FC<InteractivePlayerZoneProps> = ({
   screenVolume,
   transitionEffect,
   screenScaleMode,
-  isCompact
+  isCompact,
+  overridePlaylist,
+  overrideSlideIndex,
+  overrideTransitionKey,
+  isPrimaryZone,
+  isSecondaryZone,
+  onNextSlide,
+  onPrevSlide
 }) => {
-  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-  const [transitionKey, setTransitionKey] = useState(0);
+  const isCoordinated = overridePlaylist !== undefined;
 
   // Lấy các tệp media được phép phát (bỏ qua các tệp đã bị 'Ngừng phát')
   const enabledPlaylists = (zone.mediaPlaylist || []).filter(p => p.enabled !== false);
@@ -562,29 +734,49 @@ const InteractivePlayerZone: React.FC<InteractivePlayerZoneProps> = ({
     .map(p => mediaList.find(m => m.id === p.mediaId))
     .filter(Boolean) as MediaItem[];
 
-  // Fallback nếu chưa có playlist cụ thể
-  const fallbackMedia = mediaList.filter(m => m.type === (zone.type === 'video' ? 'video' : 'image'));
-  const effectivePlaylist = assignedMedia.length > 0 ? assignedMedia : fallbackMedia;
+  // Nếu zone.mediaPlaylist đã được cấu hình (kể cả rỗng []), tuyệt đối KHÔNG fallback sang thư viện
+  const isConfigured = Array.isArray(zone.mediaPlaylist);
+  const fallbackMedia = isConfigured ? [] : mediaList.filter(m => m.type === (zone.type === 'video' ? 'video' : 'image'));
+  const localPlaylist = assignedMedia.length > 0 ? assignedMedia : (isConfigured ? [] : fallbackMedia);
 
-  const currentMediaDuration = (enabledPlaylists[currentSlideIndex]?.duration || effectivePlaylist[currentSlideIndex]?.duration || 10);
+  const effectivePlaylist = isCoordinated ? overridePlaylist! : localPlaylist;
+
+  const [localSlideIndex, setLocalSlideIndex] = useState(0);
+  const [localTransitionKey, setLocalTransitionKey] = useState(0);
+
+  const safeSlideIndex = effectivePlaylist.length > 0
+    ? (isCoordinated && overrideSlideIndex !== undefined ? (overrideSlideIndex % effectivePlaylist.length) : (localSlideIndex % effectivePlaylist.length))
+    : 0;
+
+  const transitionKey = isCoordinated && overrideTransitionKey !== undefined ? overrideTransitionKey : localTransitionKey;
+
+  const currentMediaDuration = (enabledPlaylists[safeSlideIndex]?.duration || effectivePlaylist[safeSlideIndex]?.duration || 10);
 
   const [videoFailed, setVideoFailed] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Khai báo activeMedia trước khi sử dụng trong hook useEffect
-  const activeMedia = effectivePlaylist[currentSlideIndex] || effectivePlaylist[0];
-
-  // Tự động chuyển slide với đồng hồ countdown và trigger hiệu ứng chuyển cảnh cho TẤT CẢ các loại playlist
+  // Reset index nếu danh sách media thay đổi
   useEffect(() => {
-    if (effectivePlaylist.length > 1) {
+    if (!isCoordinated) {
+      if (effectivePlaylist.length === 0 || localSlideIndex >= effectivePlaylist.length) {
+        setLocalSlideIndex(0);
+      }
+    }
+  }, [isCoordinated, effectivePlaylist.length]);
+
+  const activeMedia = effectivePlaylist[safeSlideIndex] || null;
+
+  // Timer cho zone độc lập (không đồng bộ)
+  useEffect(() => {
+    if (!isCoordinated && effectivePlaylist.length > 1) {
       const interval = setInterval(() => {
-        setCurrentSlideIndex(prev => (prev + 1) % effectivePlaylist.length);
-        setTransitionKey(k => k + 1);
+        setLocalSlideIndex(prev => (prev + 1) % effectivePlaylist.length);
+        setLocalTransitionKey(k => k + 1);
         setVideoFailed(false);
       }, currentMediaDuration * 1000);
       return () => clearInterval(interval);
     }
-  }, [effectivePlaylist.length, currentSlideIndex, currentMediaDuration]);
+  }, [isCoordinated, effectivePlaylist.length, safeSlideIndex, currentMediaDuration]);
 
   // Luôn đảm bảo video tự động phát được trong trình duyệt không bị chính sách âm thanh chặn
   useEffect(() => {
@@ -601,7 +793,7 @@ const InteractivePlayerZone: React.FC<InteractivePlayerZoneProps> = ({
   }, [activeMedia?.id, activeMedia?.url]);
 
   // Xác định chế độ kích thước áp dụng: Kích thước hình (contain) vs Kích thước thiết bị (cover)
-  const currentPlaylistItem = zone.mediaPlaylist?.[currentSlideIndex];
+  const currentPlaylistItem = zone.mediaPlaylist?.[safeSlideIndex];
   const effectiveScaleMode: ImageScaleMode =
     currentPlaylistItem?.scaleMode ||
     zone.imageScaleMode ||
@@ -627,17 +819,21 @@ const InteractivePlayerZone: React.FC<InteractivePlayerZoneProps> = ({
 
   const handleNextSlide = (e?: React.SyntheticEvent) => {
     e?.stopPropagation?.();
-    if (effectivePlaylist.length > 1) {
-      setCurrentSlideIndex(prev => (prev + 1) % effectivePlaylist.length);
-      setTransitionKey(k => k + 1);
+    if (isCoordinated && onNextSlide) {
+      onNextSlide(e);
+    } else if (effectivePlaylist.length > 1) {
+      setLocalSlideIndex(prev => (prev + 1) % effectivePlaylist.length);
+      setLocalTransitionKey(k => k + 1);
     }
   };
 
   const handlePrevSlide = (e?: React.SyntheticEvent) => {
     e?.stopPropagation?.();
-    if (effectivePlaylist.length > 1) {
-      setCurrentSlideIndex(prev => (prev - 1 + effectivePlaylist.length) % effectivePlaylist.length);
-      setTransitionKey(k => k + 1);
+    if (isCoordinated && onPrevSlide) {
+      onPrevSlide(e);
+    } else if (effectivePlaylist.length > 1) {
+      setLocalSlideIndex(prev => (prev - 1 + effectivePlaylist.length) % effectivePlaylist.length);
+      setLocalTransitionKey(k => k + 1);
     }
   };
 
@@ -671,9 +867,7 @@ const InteractivePlayerZone: React.FC<InteractivePlayerZoneProps> = ({
                   playsInline
                   className={`w-full h-full ${fitClass} ${getTransitionClass()}`}
                   onError={() => setVideoFailed(true)}
-                  onStalled={() => {
-                    // Nếu video bị nghẽn mạng thì vẫn giữ poster không bị đen màn hình
-                  }}
+                  onStalled={() => {}}
                   onEnded={handleNextSlide}
                 />
               ) : (
@@ -742,15 +936,27 @@ const InteractivePlayerZone: React.FC<InteractivePlayerZoneProps> = ({
                 </div>
               )}
 
-              {/* Slide Counter Badge */}
-              {!isCompact && effectivePlaylist.length > 1 && (
-                <div className="absolute top-2 right-2 z-20 px-1.5 py-0.5 rounded bg-black/70 text-[9px] font-mono text-white pointer-events-none">
-                  {currentSlideIndex + 1}/{effectivePlaylist.length}
+              {/* Slide Counter Badge hoặc Tiếp Theo Badge */}
+              {!isCompact && effectivePlaylist.length > 0 && (
+                <div className={`absolute top-2 right-2 z-20 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold text-white shadow-md flex items-center space-x-1 border pointer-events-none ${
+                  isSecondaryZone 
+                    ? 'bg-cyan-600/90 border-cyan-400/40 shadow-cyan-500/20' 
+                    : 'bg-black/70 border-white/10'
+                }`}>
+                  {isSecondaryZone ? (
+                    <span>→ Tiếp theo: {safeSlideIndex + 1}/{effectivePlaylist.length}</span>
+                  ) : (
+                    <span>{safeSlideIndex + 1}/{effectivePlaylist.length}</span>
+                  )}
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-slate-600 text-[10px] font-mono">Đang chờ hình ảnh...</div>
+            <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center space-y-1 bg-slate-950 border border-slate-800/40">
+              <ImageOff className="w-6 h-6 text-slate-600" />
+              <span className="text-slate-400 text-xs font-semibold">Chưa có tệp trình chiếu nào</span>
+              <span className="text-slate-600 text-[10px] font-mono">(Đã xoá hết hình khỏi thiết bị)</span>
+            </div>
           )}
         </div>
       )}

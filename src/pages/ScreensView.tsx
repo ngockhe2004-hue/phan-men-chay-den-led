@@ -339,11 +339,11 @@ export const ScreensView: React.FC<ScreensViewProps> = ({
                     className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-105"
                   />
                   <div className="absolute top-2 right-2 px-2 py-0.5 rounded bg-black/70 backdrop-blur-sm text-[10px] font-mono text-slate-300">
-                    {screen.resolution.width}x{screen.resolution.height} ({screen.orientation === 'landscape' ? 'Ngang' : 'Dọc'})
+                    {screen.resolution?.width || 1920}x{screen.resolution?.height || 1080} ({screen.orientation === 'portrait' ? 'Dọc' : 'Ngang'})
                   </div>
                   <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 backdrop-blur-sm text-[10px] text-slate-300 flex items-center space-x-1">
                     <Cpu className="w-3 h-3 text-cyan-400" />
-                    <span>{screen.deviceModel.split(' ')[0]}</span>
+                    <span>{(screen.deviceModel || 'LED Controller').split(' ')[0]}</span>
                   </div>
                 </div>
 
@@ -380,14 +380,27 @@ export const ScreensView: React.FC<ScreensViewProps> = ({
 
               {/* Action Buttons */}
               <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-xs">
-                <button
-                  onClick={() => onOpenPlayerSimulator(screen.id)}
-                  className="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center space-x-1 text-[11px]"
-                  title="Mở trình phát mô phỏng màn hình này"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Mô Phỏng Player</span>
-                </button>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => onOpenPlayerSimulator(screen.id)}
+                    className="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center space-x-1 text-[11px]"
+                    title="Mở trình phát mô phỏng màn hình này"
+                  >
+                    <MonitorPlay className="w-3.5 h-3.5" />
+                    <span>Mô Phỏng</span>
+                  </button>
+
+                  <a
+                    href="/player/index.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center space-x-1 text-[11px]"
+                    title="Mở Web Player độc lập toàn màn hình cho màn hình LED hoặc TV"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Web Player</span>
+                  </a>
+                </div>
 
                 <div className="flex items-center space-x-2">
                   <button

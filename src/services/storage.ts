@@ -114,6 +114,9 @@ class StorageService {
 
   private notify() {
     this.listeners.forEach(l => l());
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('storage'));
+    }
   }
 
   // --- Screens ---
@@ -292,6 +295,29 @@ class StorageService {
   deleteMedia(id: string) {
     const media = this.getMedia().filter(m => m.id !== id);
     this.saveMedia(media);
+
+    // Đồng thời gỡ bỏ tệp bị xoá khỏi toàn bộ danh sách phát của các bố cục màn hình
+    const layouts = this.getLayouts();
+    let layoutsChanged = false;
+    layouts.forEach(l => {
+      let lModified = false;
+      l.zones.forEach(z => {
+        if (Array.isArray(z.mediaPlaylist)) {
+          const prevLen = z.mediaPlaylist.length;
+          z.mediaPlaylist = z.mediaPlaylist.filter(p => p.mediaId !== id);
+          if (z.mediaPlaylist.length !== prevLen) {
+            lModified = true;
+            layoutsChanged = true;
+          }
+        }
+      });
+      if (lModified) {
+        l.updatedAt = new Date().toISOString();
+      }
+    });
+    if (layoutsChanged) {
+      this.saveLayouts(layouts);
+    }
   }
 
   // --- Layouts ---

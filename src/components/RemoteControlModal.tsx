@@ -118,8 +118,8 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
   // Khởi tạo dữ liệu khi mở modal hoặc đổi màn hình
   useEffect(() => {
     if (screen && isOpen) {
-      setVolume(screen.volume);
-      setIsMuted(screen.isMuted);
+      setVolume(screen.volume ?? 80);
+      setIsMuted(Boolean(screen.isMuted));
       setPowerState(screen.powerState);
       setScreenshotPreview(screen.screenshotUrl);
       setImageScaleMode(screen.imageScaleMode || 'fit_device');
@@ -335,22 +335,94 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
     showNotice(`⏱️ ĐÃ ĐƯA VÀO CHỜ PHÁT: "${item.media.title}"`);
   };
 
-  // 4. NÚT XÓA: Gỡ hẳn khỏi màn hình
+  // Helper lưu và đồng bộ danh sách zone xuống storage & thiết bị
+  const saveZonesToStorage = (zonesToSave: LayoutZone[], disabledIds: string[]) => {
+    const allScreens = storageService.getScreens();
+    const latestLayouts = storageService.getLayouts();
+    const targetLayout = latestLayouts.find(l => l.id === screen.currentLayoutId) || latestLayouts[0];
+    if (!targetLayout) return;
+
+    const updatedZones = zonesToSave.map(z => {
+      const playlist = Array.isArray(z.mediaPlaylist) ? z.mediaPlaylist : getZonePlaylist(z);
+      return {
+        ...z,
+        mediaPlaylist: playlist.map(p => ({
+          ...p,
+          enabled: !disabledIds.includes(p.mediaId),
+          scaleMode: itemScaleModes[p.mediaId] || p.scaleMode || imageScaleMode,
+        })),
+      };
+    });
+
+    const screensSharingLayout = allScreens.filter(s => s.currentLayoutId === targetLayout.id);
+    let finalLayoutId = targetLayout.id;
+
+    if (screensSharingLayout.length > 1) {
+      finalLayoutId = `layout-${screen.id}-${Date.now()}`;
+      const clonedLayout: LayoutTemplate = {
+        ...targetLayout,
+        id: finalLayoutId,
+        name: `${targetLayout.name} (${screen.code})`,
+        zones: updatedZones,
+        updatedAt: new Date().toISOString(),
+      };
+      storageService.addLayout(clonedLayout);
+    } else {
+      const updatedLayout: LayoutTemplate = {
+        ...targetLayout,
+        zones: updatedZones,
+        updatedAt: new Date().toISOString(),
+      };
+      storageService.updateLayout(updatedLayout);
+    }
+
+    const updatedScreen: Screen = {
+      ...screen,
+      currentLayoutId: finalLayoutId,
+      volume,
+      isMuted,
+      powerState,
+      imageScaleMode,
+    };
+    storageService.updateScreen(updatedScreen);
+
+    storageService.sendRemoteCommand(screen.id, { type: 'apply_layout', value: finalLayoutId });
+    setHasUnsavedChanges(false);
+    onUpdate();
+  };
+
+  // 4. NÚT XÓA: Gỡ hẳn khỏi màn hình và cập nhật ngay lập tức xuống thiết bị
   const handleRemoveMedia = (item: ScreenMediaItem) => {
     if (confirm(`Bạn có chắc chắn muốn xóa "${item.media.title}" khỏi danh sách chiếu của màn hình này?`)) {
-      setEditableZones(prev => prev.map(z => {
+      const updatedZones = editableZones.map(z => {
         if (z.id === item.zoneId) {
-          const currentList = z.mediaPlaylist || getZonePlaylist(z);
+          const currentList = Array.isArray(z.mediaPlaylist) ? z.mediaPlaylist : getZonePlaylist(z);
           return {
             ...z,
             mediaPlaylist: currentList.filter(p => p.mediaId !== item.media.id),
           };
         }
         return z;
+      });
+      const updatedDisabled = disabledMediaIds.filter(id => id !== item.media.id);
+      setEditableZones(updatedZones);
+      setDisabledMediaIds(updatedDisabled);
+      saveZonesToStorage(updatedZones, updatedDisabled);
+      showNotice(`🗑️ Đã xóa "${item.media.title}" khỏi thiết bị`);
+    }
+  };
+
+  // NÚT XÓA TẤT CẢ TỆP: Xoá sạch toàn bộ hình ảnh/video của thiết bị này
+  const handleRemoveAllMedia = () => {
+    if (confirm(`Bạn có chắc chắn muốn xóa TẤT CẢ tệp trình chiếu khỏi thiết bị "${screen.name}"?`)) {
+      const updatedZones = editableZones.map(z => ({
+        ...z,
+        mediaPlaylist: [],
       }));
-      setDisabledMediaIds(prev => prev.filter(id => id !== item.media.id));
-      setHasUnsavedChanges(true);
-      showNotice(`🗑️ Đã xóa "${item.media.title}" khỏi danh sách`);
+      setEditableZones(updatedZones);
+      setDisabledMediaIds([]);
+      saveZonesToStorage(updatedZones, []);
+      showNotice(`🗑️ Đã xóa tất cả tệp khỏi thiết bị "${screen.name}"! Thiết bị sẽ dừng phát hình cũ ngay.`);
     }
   };
 
@@ -394,71 +466,49 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
     showNotice(`"${item.media.title}": Đã chuyển sang ${nextMode === 'fit_device' ? 'Kích thước thiết bị' : 'Kích thước hình gốc'}`);
   };
 
+  // 7. ĐIỀU CHỈNH THỜI GIAN HIỂN THỊ (DURATION)
+  const handleChangeItemDuration = (item: ScreenMediaItem, newDuration: number) => {
+    const val = Math.max(1, Math.min(3600, Math.round(newDuration)));
+    setEditableZones(prev => prev.map(z => {
+      if (z.id === item.zoneId) {
+        return {
+          ...z,
+          mediaPlaylist: (z.mediaPlaylist || []).map(p => {
+            if (p.mediaId === item.media.id) {
+              return { ...p, duration: val };
+            }
+            return p;
+          }),
+        };
+      }
+      return z;
+    }));
+    setHasUnsavedChanges(true);
+    showNotice(`"${item.media.title}": Thời gian hiển thị đổi thành ${val} giây.`);
+  };
+
+  const handleApplyGlobalDuration = (seconds: number) => {
+    const val = Math.max(1, Math.min(3600, Math.round(seconds)));
+    setEditableZones(prev => prev.map(z => ({
+      ...z,
+      mediaPlaylist: (z.mediaPlaylist || []).map(p => ({
+        ...p,
+        duration: val,
+      })),
+    })));
+    setHasUnsavedChanges(true);
+    showNotice(`⏱️ Đã đặt tất cả hình ảnh/video sang ${val} giây/lần chuyển! Bấm "Lưu & Áp Dụng Thay Đổi" để cập nhật ngay xuống thiết bị.`);
+  };
+
   // ----------------------------------------------------
   // NÚT LƯU & ÁP DỤNG THAY ĐỔI (QUAN TRỌNG NHẤT)
   // ----------------------------------------------------
   const handleSaveAndApply = () => {
-    const allScreens = storageService.getScreens();
-    const latestLayouts = storageService.getLayouts();
-    const targetLayout = latestLayouts.find(l => l.id === screen.currentLayoutId) || latestLayouts[0];
-    if (!targetLayout) return;
-
-    // 1. Cập nhật Layout Template với zones đã chỉnh sửa
-    const updatedZones = editableZones.map(z => {
-      const playlist = getZonePlaylist(z);
-      return {
-        ...z,
-        mediaPlaylist: playlist.map(p => ({
-          ...p,
-          enabled: !disabledMediaIds.includes(p.mediaId),
-          scaleMode: itemScaleModes[p.mediaId] || p.scaleMode || imageScaleMode,
-        })),
-      };
-    });
-
-    // Tự động phân lập bộ nhớ: Nếu layout đang dùng chung bởi nhiều màn hình khác -> Clone layout riêng cho màn hình này
-    const screensSharingLayout = allScreens.filter(s => s.currentLayoutId === targetLayout.id);
-    let finalLayoutId = targetLayout.id;
-
-    if (screensSharingLayout.length > 1) {
-      finalLayoutId = `layout-${screen.id}-${Date.now()}`;
-      const clonedLayout: LayoutTemplate = {
-        ...targetLayout,
-        id: finalLayoutId,
-        name: `${targetLayout.name} (${screen.code})`,
-        zones: updatedZones,
-        updatedAt: new Date().toISOString(),
-      };
-      storageService.addLayout(clonedLayout);
-    } else {
-      const updatedLayout: LayoutTemplate = {
-        ...targetLayout,
-        zones: updatedZones,
-        updatedAt: new Date().toISOString(),
-      };
-      storageService.updateLayout(updatedLayout);
-    }
-
-    // 2. Cập nhật thông tin Màn Hình (Screen) với Layout ID riêng biệt
-    const updatedScreen: Screen = {
-      ...screen,
-      currentLayoutId: finalLayoutId,
-      volume,
-      isMuted,
-      powerState,
-      imageScaleMode,
-    };
-    storageService.updateScreen(updatedScreen);
-
-    // 3. Gửi các lệnh điều khiển đồng bộ trực tiếp xuống thiết bị
+    saveZonesToStorage(editableZones, disabledMediaIds);
     storageService.sendRemoteCommand(screen.id, { type: 'set_image_scale_mode', value: imageScaleMode });
     storageService.sendRemoteCommand(screen.id, { type: 'volume', value: volume });
     storageService.sendRemoteCommand(screen.id, { type: 'power', value: powerState });
-    storageService.sendRemoteCommand(screen.id, { type: 'apply_layout', value: finalLayoutId });
-
-    setHasUnsavedChanges(false);
     showNotice(`🎉 ĐÃ LƯU & ÁP DỤNG THÀNH CÔNG THAY ĐỔI RIÊNG CHO MÀN HÌNH ${screen.code}!`);
-    onUpdate();
   };
 
   // Các thao tác phần cứng tức thời
@@ -496,7 +546,8 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
     setIsCapturing(true);
     showNotice('Đang chụp ảnh thực tế từ thiết bị...');
     setTimeout(() => {
-      const newUrl = `${screen.screenshotUrl.split('?')[0]}?t=${Date.now()}`;
+      const base = (screen.screenshotUrl || 'https://images.unsplash.com/photo-1542744094-3a31f272c490').split('?')[0];
+      const newUrl = `${base}?t=${Date.now()}`;
       setScreenshotPreview(newUrl);
       storageService.sendRemoteCommand(screen.id, { type: 'screenshot' });
       setIsCapturing(false);
@@ -820,19 +871,33 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
                   </span>
                 </div>
 
-                {/* Nút Thêm Media từ Thư Viện */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedLibraryMediaIds([]);
-                    setIsAddMediaOpen(true);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-500 hover:to-sky-500 text-white text-xs font-bold transition-all flex items-center space-x-1.5 shadow-md shadow-cyan-600/20 active:scale-95"
-                  title="Thêm hình ảnh hoặc video từ Thư Viện Media vào màn hình này"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Thêm Từ Thư Viện</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  {screenMediaList.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAllMedia}
+                      className="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-semibold transition-all flex items-center space-x-1 active:scale-95"
+                      title="Xoá toàn bộ hình ảnh và video khỏi thiết bị này"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Xóa Hết</span>
+                    </button>
+                  )}
+
+                  {/* Nút Thêm Media từ Thư Viện */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedLibraryMediaIds([]);
+                      setIsAddMediaOpen(true);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-500 hover:to-sky-500 text-white text-xs font-bold transition-all flex items-center space-x-1.5 shadow-md shadow-cyan-600/20 active:scale-95"
+                    title="Thêm hình ảnh hoặc video từ Thư Viện Media vào màn hình này"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Thêm Từ Thư Viện</span>
+                  </button>
+                </div>
               </div>
 
               {/* Bộ lọc Tab Trạng Thái: Tất Cả / Đang Phát / Chờ Phát / Không Phát */}
@@ -887,6 +952,34 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
                   <span className="w-2 h-2 rounded-full bg-slate-500" />
                   <span>Không Phát ({countDisabled})</span>
                 </button>
+              </div>
+
+              {/* THANH ĐIỀU CHỈNH THỜI GIAN CHUYỂN ẢNH TOÀN THIẾT BỊ */}
+              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-cyan-500/30 flex flex-wrap items-center justify-between gap-2.5 shadow-sm">
+                <div className="flex items-center space-x-2">
+                  <div className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-400">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-white block">Thời Gian Chuyển Ảnh:</span>
+                    <span className="text-[10px] text-slate-400">Điều chỉnh số giây mỗi ảnh hiển thị rồi tự chuyển</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-[11px] text-slate-400 font-medium mr-1">Đặt nhanh tất cả:</span>
+                  {[3, 5, 8, 10, 15, 20, 30].map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => handleApplyGlobalDuration(s)}
+                      className="px-2 py-1 rounded-lg font-mono font-bold text-[11px] bg-slate-800 hover:bg-cyan-600 hover:text-white text-slate-300 border border-slate-700 hover:border-cyan-400 transition-all active:scale-95 shadow-sm"
+                      title={`Đặt tất cả ảnh sang ${s} giây`}
+                    >
+                      {s}s
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Danh sách các Media Card có thanh cuộn mượt mà */}
@@ -954,13 +1047,42 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
                           </div>
 
                           {/* Sub-info: Zone, Duration & Individual Scaling Toggle */}
-                          <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1.5">
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1.5 flex-wrap gap-2">
                             <div className="flex items-center space-x-2 truncate">
                               <span className="text-cyan-400 font-medium truncate">{item.zoneName}</span>
                               <span>•</span>
-                              <span className="font-mono bg-slate-800/80 px-1.5 py-0.5 rounded text-slate-300 text-[10px]">
-                                {item.duration}s
-                              </span>
+
+                              {/* Điều chỉnh thời gian hiển thị riêng cho tệp này */}
+                              <div className="flex items-center space-x-1 bg-slate-950 px-1.5 py-0.5 rounded-lg border border-slate-700/80 shadow-inner">
+                                <Clock className="w-3 h-3 text-cyan-400" />
+                                <button
+                                  type="button"
+                                  onClick={() => handleChangeItemDuration(item, Math.max(1, item.duration - 1))}
+                                  className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold flex items-center justify-center text-xs transition-colors"
+                                  title="Giảm 1 giây"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="3600"
+                                  value={item.duration}
+                                  onChange={(e) => handleChangeItemDuration(item, Number(e.target.value))}
+                                  className="w-9 bg-transparent font-mono text-cyan-300 font-bold text-center text-[10px] focus:outline-none"
+                                  title="Số giây hiển thị"
+                                />
+                                <span className="text-[10px] text-slate-400 font-medium">s</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleChangeItemDuration(item, item.duration + 1)}
+                                  className="w-4 h-4 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold flex items-center justify-center text-xs transition-colors"
+                                  title="Tăng 1 giây"
+                                >
+                                  +
+                                </button>
+                              </div>
+
                               <span>•</span>
                               {/* Nút đổi co giãn cho riêng tệp này */}
                               <button

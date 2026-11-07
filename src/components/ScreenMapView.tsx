@@ -38,13 +38,13 @@ export const ScreenMapView: React.FC<ScreenMapViewProps> = ({
   const selectedScreen = screens.find(s => s.id === selectedScreenId) || screens[0];
   const activeLayout = layouts.find(l => l.id === selectedScreen?.currentLayoutId);
 
-  const cities = ['ALL', ...Array.from(new Set(screens.map(s => s.coordinates?.city || s.location.split(',').pop()?.trim() || 'Khác')))];
+  const cities = ['ALL', ...Array.from(new Set(screens.map(s => s.coordinates?.city || (s.location || '').split(',').pop()?.trim() || 'Khác')))];
 
   const filteredScreens = screens.filter(s => {
     const matchSearch = s.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
       s.code.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      s.location.toLowerCase().includes(searchFilter.toLowerCase());
-    const city = s.coordinates?.city || s.location.split(',').pop()?.trim();
+      (s.location || '').toLowerCase().includes(searchFilter.toLowerCase());
+    const city = s.coordinates?.city || (s.location || '').split(',').pop()?.trim() || 'Khác';
     const matchCity = selectedCity === 'ALL' || city === selectedCity;
     return matchSearch && matchCity;
   });

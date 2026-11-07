@@ -1,9 +1,19 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import * as path from 'path';
+import * as fs from 'fs';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Phục vụ file tĩnh cho thư mục uploads (Local fallback cho MinIO)
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
 
   // Global prefix
   app.setGlobalPrefix('api');
@@ -29,7 +39,6 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`\n🚀 LED CMS Backend running on: http://localhost:${port}`);
   console.log(`📖 API Base URL: http://localhost:${port}/api`);
-  console.log(`🗄️  MinIO Console: http://localhost:9001`);
-  console.log(`🖥️  Adminer DB: http://localhost:8080\n`);
+  console.log(`📁 Local Uploads: http://localhost:${port}/uploads\n`);
 }
 bootstrap();

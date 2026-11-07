@@ -14,7 +14,8 @@ import {
   LogOut,
   KeyRound,
   User as UserIcon,
-  ChevronDown
+  ChevronDown,
+  ExternalLink
 } from 'lucide-react';
 import { storageService, EmergencyState } from '../services/storage';
 import { api } from '../services/api';
@@ -130,8 +131,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Mở trình phát mô phỏng màn hình LED trên trình duyệt"
           >
             <MonitorPlay className="w-4 h-4" />
-            <span className="hidden sm:inline">Mở Trình Phát (Player)</span>
+            <span className="hidden sm:inline">Trình Phát Mô Phỏng</span>
           </button>
+
+          {/* Open Standalone Web Player */}
+          <a
+            href="/player/index.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center space-x-2 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/20 transition-all active:scale-95"
+            title="Mở Trình Phát Độc Lập (Standalone Player) trên tab mới để chiếu ra màn hình LED hoặc TV"
+          >
+            <ExternalLink className="w-4 h-4" />
+            <span className="hidden sm:inline">Web Player (Tab Mới)</span>
+          </a>
 
           {/* Quick Pair Screen */}
           <button
