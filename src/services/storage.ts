@@ -239,7 +239,8 @@ class StorageService {
       
       // Tự động khôi phục ảnh/video nếu URL blob cũ bị hết hạn hoặc đường dẫn file cục bộ không tải được
       const defaultImage = 'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=800&q=80';
-      const defaultVideo = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+      const defaultVideo = '/videos/sample-video.mp4';
+      const defaultVideo2 = '/videos/sample-video-2.mp4';
       
       const isBadUrl = (u?: string) => {
         if (!u || !u.trim()) return true;
@@ -248,6 +249,7 @@ class StorageService {
           str.startsWith('blob:') ||
           str.startsWith('file:') ||
           str.toLowerCase().includes('fakepath') ||
+          str.includes('commondatastorage.googleapis.com') ||
           /^[a-zA-Z]:\\/.test(str) ||
           /^[a-zA-Z]:\//.test(str)
         );
@@ -258,7 +260,11 @@ class StorageService {
         let url = item.url;
         let thumb = item.thumbnail;
         if (isBadUrl(url)) {
-          url = item.type === 'video' ? defaultVideo : defaultImage;
+          if (item.type === 'video') {
+            url = item.id === 'media-2' ? defaultVideo2 : defaultVideo;
+          } else {
+            url = defaultImage;
+          }
           hasFixedBlob = true;
         }
         if (isBadUrl(thumb)) {

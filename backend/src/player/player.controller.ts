@@ -23,7 +23,15 @@ export class PlayerController {
 
   /** POST /api/player/heartbeat */
   @Post('heartbeat')
-  heartbeat(@Body() body: { code?: string; screenId?: string; status?: string; appVersion?: string }) {
+  heartbeat(
+    @Body()
+    body: {
+      code?: string;
+      screenId?: string;
+      status?: string;
+      appVersion?: string;
+    },
+  ) {
     return this.playerService.heartbeat(body);
   }
 

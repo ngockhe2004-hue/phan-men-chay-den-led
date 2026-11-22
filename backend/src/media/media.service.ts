@@ -8,8 +8,12 @@ export class MediaService {
   findAll(query?: { type?: string; search?: string }) {
     const where: any = {};
     if (query?.type && query.type !== 'ALL') where.type = query.type;
-    if (query?.search) where.title = { contains: query.search, mode: 'insensitive' };
-    return this.prisma.mediaItem.findMany({ where, orderBy: { uploadedAt: 'desc' } });
+    if (query?.search)
+      where.title = { contains: query.search, mode: 'insensitive' };
+    return this.prisma.mediaItem.findMany({
+      where,
+      orderBy: { uploadedAt: 'desc' },
+    });
   }
 
   async findOne(id: string) {

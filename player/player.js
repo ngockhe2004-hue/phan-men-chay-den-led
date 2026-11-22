@@ -704,11 +704,6 @@ function renderMediaZone(container, zone) {
   const wrapper = document.createElement('div');
   wrapper.className = 'zone-media';
 
-  const progressBar = document.createElement('div');
-  progressBar.className = 'media-progress';
-  progressBar.innerHTML = '<div class="media-progress-fill" id="progress-' + zone.id + '"></div>';
-  wrapper.appendChild(progressBar);
-
   if (isSecondary) {
     const badge = document.createElement('div');
     badge.className = 'small-zone-badge';
@@ -742,39 +737,53 @@ function renderMediaItem(zoneId, wrapper, media, playlistItem, zone) {
   wrapper.querySelectorAll('video, img').forEach(el => el.remove());
 
   if (media.type === 'video') {
+    let videoUrl = media.url;
+    if (!videoUrl || videoUrl.includes('commondatastorage.googleapis.com')) {
+      videoUrl = media.id === 'media-2' ? '/videos/sample-video-2.mp4' : '/videos/sample-video.mp4';
+    }
+
     const vid = document.createElement('video');
-    vid.src = media.url;
+    vid.src = videoUrl;
     vid.autoplay = true;
     vid.muted = true;
+    vid.defaultMuted = true;
     vid.loop = true;
     vid.playsInline = true;
+    vid.setAttribute('playsinline', '');
+    vid.setAttribute('muted', '');
     vid.className = `${fitClass} ${transClass}`;
     vid.volume = (state.screen?.isMuted ? 0 : (state.screen?.volume || 80)) / 100;
     vid.poster = media.thumbnail || '';
-    vid.onerror = () => { fallbackToImage(wrapper, media, fitClass, transClass); };
+    
+    vid.onerror = () => {
+      // Nếu video ban đầu lỗi tải (vd 403 hoặc link chết), thử phát video mẫu nội bộ
+      if (vid.src && !vid.src.includes('/videos/sample-video')) {
+        vid.src = '/videos/sample-video.mp4';
+        vid.load();
+        vid.play().catch(() => fallbackToImage(wrapper, media, fitClass, transClass));
+      } else {
+        fallbackToImage(wrapper, media, fitClass, transClass);
+      }
+    };
     vid.onended = () => advanceZone(zoneId);
-    wrapper.insertBefore(vid, wrapper.querySelector('.media-progress'));
-    vid.play().catch(() => { vid.muted = true; vid.play().catch(() => fallbackToImage(wrapper, media, fitClass, transClass)); });
+    wrapper.appendChild(vid);
+
+    const p = vid.play();
+    if (p !== undefined) {
+      p.catch(() => {
+        vid.muted = true;
+        vid.play().catch(err => {
+          console.warn('Video cần tương tác người dùng để phát tiếng:', err);
+        });
+      });
+    }
   } else {
     const img = document.createElement('img');
     img.src = media.url || media.thumbnail || '';
     img.alt = media.title || '';
     img.className = `${fitClass} ${transClass}`;
     img.onerror = () => { img.src = 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80'; };
-    wrapper.insertBefore(img, wrapper.querySelector('.media-progress'));
-  }
-
-  // Animate progress bar
-  const prog = wrapper.querySelector('.media-progress-fill');
-  if (prog) {
-    prog.style.transition = 'none';
-    prog.style.width = '0%';
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        prog.style.transition = `width ${duration}s linear`;
-        prog.style.width = '100%';
-      });
-    });
+    wrapper.appendChild(img);
   }
 }
 
@@ -783,7 +792,7 @@ function fallbackToImage(wrapper, media, fitClass, transClass) {
   const img = document.createElement('img');
   img.src = media.thumbnail || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80';
   img.className = `${fitClass} ${transClass}`;
-  wrapper.insertBefore(img, wrapper.querySelector('.media-progress'));
+  wrapper.appendChild(img);
 }
 
 function advanceZone(zoneId, direction = 1) {

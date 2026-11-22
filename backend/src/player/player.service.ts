@@ -8,7 +8,9 @@ export class PlayerService {
   /** POST /api/player/pair — Đăng ký thiết bị bằng pairing code */
   async pair(code: string, deviceInfo: any) {
     const upperCode = code.toUpperCase();
-    const existing = await this.prisma.screen.findUnique({ where: { code: upperCode } });
+    const existing = await this.prisma.screen.findUnique({
+      where: { code: upperCode },
+    });
 
     if (existing) {
       return this.prisma.screen.update({
@@ -45,7 +47,8 @@ export class PlayerService {
     const screen = await this.prisma.screen.findUnique({
       where: { code: code.toUpperCase() },
     });
-    if (!screen) throw new NotFoundException(`Không tìm thấy màn hình với code: ${code}`);
+    if (!screen)
+      throw new NotFoundException(`Không tìm thấy màn hình với code: ${code}`);
 
     let layout = null;
     let mediaItems: any[] = [];
@@ -77,12 +80,17 @@ export class PlayerService {
   }
 
   /** POST /api/player/heartbeat — Nhịp tim thiết bị */
-  async heartbeat(data: { code?: string; screenId?: string; status?: string; appVersion?: string }) {
+  async heartbeat(data: {
+    code?: string;
+    screenId?: string;
+    status?: string;
+    appVersion?: string;
+  }) {
     const where = data.code
       ? { code: data.code.toUpperCase() }
       : data.screenId
-      ? { id: data.screenId }
-      : null;
+        ? { id: data.screenId }
+        : null;
 
     if (!where) return { success: false, message: 'Thiếu code hoặc screenId' };
 

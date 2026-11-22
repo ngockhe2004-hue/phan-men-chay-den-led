@@ -31,11 +31,17 @@ export class UploadService {
 
       // An toàn: bọc catch để không làm sập ứng dụng nếu MinIO chưa bật
       this.ensureBucket().catch((err) => {
-        console.warn('ℹ️  MinIO (S3) chưa kích hoạt. Hệ thống tự động chuyển sang Local Disk Storage:', err.message);
+        console.warn(
+          'ℹ️  MinIO (S3) chưa kích hoạt. Hệ thống tự động chuyển sang Local Disk Storage:',
+          err.message,
+        );
         this.isMinioAvailable = false;
       });
     } catch (err: any) {
-      console.warn('ℹ️  Không thể khởi tạo MinIO client. Dùng Local Storage:', err.message);
+      console.warn(
+        'ℹ️  Không thể khởi tạo MinIO client. Dùng Local Storage:',
+        err.message,
+      );
       this.isMinioAvailable = false;
     }
   }
@@ -47,21 +53,27 @@ export class UploadService {
       await this.minioClient.makeBucket(this.bucket, 'us-east-1');
       const policy = JSON.stringify({
         Version: '2012-10-17',
-        Statement: [{
-          Effect: 'Allow',
-          Principal: { AWS: ['*'] },
-          Action: ['s3:GetObject'],
-          Resource: [`arn:aws:s3:::${this.bucket}/*`],
-        }],
+        Statement: [
+          {
+            Effect: 'Allow',
+            Principal: { AWS: ['*'] },
+            Action: ['s3:GetObject'],
+            Resource: [`arn:aws:s3:::${this.bucket}/*`],
+          },
+        ],
       });
       await this.minioClient.setBucketPolicy(this.bucket, policy);
-      console.log(`✅ MinIO bucket "${this.bucket}" created with public-read policy`);
+      console.log(
+        `✅ MinIO bucket "${this.bucket}" created with public-read policy`,
+      );
     }
     this.isMinioAvailable = true;
     console.log(`✅ MinIO Object Storage đã kết nối`);
   }
 
-  async uploadToMinio(file: Express.Multer.File): Promise<{ url: string; path: string }> {
+  async uploadToMinio(
+    file: Express.Multer.File,
+  ): Promise<{ url: string; path: string }> {
     const ext = path.extname(file.originalname);
     const fileName = `${Date.now()}-${randomUUID()}${ext}`;
 
@@ -80,7 +92,10 @@ export class UploadService {
         const url = `http://${endpoint}:${port}/${this.bucket}/${objectPath}`;
         return { url, path: objectPath };
       } catch (err: any) {
-        console.warn('⚠️ Upload MinIO thất bại, chuyển sang lưu Local Disk:', err.message);
+        console.warn(
+          '⚠️ Upload MinIO thất bại, chuyển sang lưu Local Disk:',
+          err.message,
+        );
       }
     }
 

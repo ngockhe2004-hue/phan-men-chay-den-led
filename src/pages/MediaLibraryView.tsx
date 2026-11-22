@@ -73,13 +73,31 @@ export const MediaLibraryView: React.FC = () => {
       setNewType('video');
       const fileUrl = URL.createObjectURL(file);
       setNewUrl(fileUrl);
-      // Thử đọc thời lượng thực tế của file video
+      // Thử đọc thời lượng thực tế của file video và chụp thumbnail frame đầu
       const videoEl = document.createElement('video');
       videoEl.preload = 'metadata';
+      videoEl.muted = true;
       videoEl.src = fileUrl;
       videoEl.onloadedmetadata = () => {
         if (videoEl.duration && !isNaN(videoEl.duration)) {
           setNewDuration(Math.round(videoEl.duration));
+        }
+        // Nhảy đến giây thứ 1 để chụp thumbnail frame đẹp
+        videoEl.currentTime = Math.min(1, (videoEl.duration || 1) / 2);
+      };
+      videoEl.onseeked = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = videoEl.videoWidth || 640;
+          canvas.height = videoEl.videoHeight || 360;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+            const thumbUrl = canvas.toDataURL('image/jpeg', 0.8);
+            setNewThumb(thumbUrl);
+          }
+        } catch {
+          // Fallback thumbnail mặc định nếu cross-origin
         }
       };
     } else if (file.type.startsWith('image/')) {
@@ -177,7 +195,7 @@ export const MediaLibraryView: React.FC = () => {
       id: 'media-' + Date.now(),
       title: newTitle.trim(),
       type: newType,
-      url: newUrl.trim() || (newType === 'video' ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' : 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80'),
+      url: newUrl.trim() || (newType === 'video' ? '/videos/sample-video.mp4' : 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80'),
       thumbnail: newThumb.trim() || defaultThumbs[newType],
       duration: newType === 'video' ? Number(newDuration) : 15,
       size: formattedSize,

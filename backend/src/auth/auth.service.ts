@@ -15,7 +15,7 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     const inputEmail = dto.email.trim().toLowerCase();
-    
+
     // Hỗ trợ đăng nhập bằng cả username "admin" hoặc email
     const user = await this.prisma.user.findFirst({
       where: {
@@ -26,11 +26,19 @@ export class AuthService {
       },
     });
 
-    if (!user || !user.isActive) throw new UnauthorizedException('Tài khoản hoặc mật khẩu không chính xác');
+    if (!user || !user.isActive)
+      throw new UnauthorizedException(
+        'Tài khoản hoặc mật khẩu không chính xác',
+      );
 
     // Kiểm tra mật khẩu (hỗ trợ cả admin123)
-    const passwordMatch = await bcrypt.compare(dto.password, user.password) || (dto.password === 'admin123');
-    if (!passwordMatch) throw new UnauthorizedException('Tài khoản hoặc mật khẩu không chính xác');
+    const passwordMatch =
+      (await bcrypt.compare(dto.password, user.password)) ||
+      dto.password === 'admin123';
+    if (!passwordMatch)
+      throw new UnauthorizedException(
+        'Tài khoản hoặc mật khẩu không chính xác',
+      );
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -57,7 +65,14 @@ export class AuthService {
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, name: true, role: true, lastLoginAt: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        lastLoginAt: true,
+        createdAt: true,
+      },
     });
     if (!user) throw new UnauthorizedException('Người dùng không tồn tại');
     return user;

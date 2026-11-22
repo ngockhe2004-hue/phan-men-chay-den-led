@@ -783,12 +783,17 @@ const InteractivePlayerZone: React.FC<InteractivePlayerZoneProps> = ({
     setVideoFailed(false);
     if (videoRef.current) {
       videoRef.current.muted = true;
-      videoRef.current.play().catch(() => {
-        if (videoRef.current) {
-          videoRef.current.muted = true;
-          videoRef.current.play().catch(() => setVideoFailed(true));
-        }
-      });
+      videoRef.current.defaultMuted = true;
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // Trình duyệt tạm hoãn autoplay, thử play lại khi muted
+          if (videoRef.current) {
+            videoRef.current.muted = true;
+            videoRef.current.play().catch(() => {});
+          }
+        });
+      }
     }
   }, [activeMedia?.id, activeMedia?.url]);
 
@@ -859,7 +864,11 @@ const InteractivePlayerZone: React.FC<InteractivePlayerZoneProps> = ({
                 <video
                   ref={videoRef}
                   key={`${activeMedia.id}-${transitionKey}`}
-                  src={activeMedia.url}
+                  src={
+                    activeMedia.url && !activeMedia.url.includes('commondatastorage.googleapis.com')
+                      ? activeMedia.url
+                      : (activeMedia.id === 'media-2' ? '/videos/sample-video-2.mp4' : '/videos/sample-video.mp4')
+                  }
                   poster={activeMedia.thumbnail || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80'}
                   autoPlay
                   loop
@@ -901,18 +910,6 @@ const InteractivePlayerZone: React.FC<InteractivePlayerZoneProps> = ({
                 </div>
               )}
 
-              {/* Thanh tiến trình chuyển cảnh (Slide Countdown Progress Bar) */}
-              {!isCompact && effectivePlaylist.length > 1 && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/40 z-20">
-                  <div
-                    key={`progress-${transitionKey}`}
-                    className="h-full bg-gradient-to-r from-cyan-400 to-sky-300"
-                    style={{
-                      animation: `ticker ${currentMediaDuration}s linear infinite`
-                    }}
-                  />
-                </div>
-              )}
 
               {/* Nút thủ công chuyển slide khi hover (cho người vận hành kiểm tra chuyển cảnh) */}
               {!isCompact && effectivePlaylist.length > 1 && (

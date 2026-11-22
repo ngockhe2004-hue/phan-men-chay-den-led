@@ -19,16 +19,20 @@ export class ScreensService {
   private prepareScreenData(data: any) {
     const payload = { ...data };
     if (payload.resolution) {
-      if (payload.resolution.width) payload.resolutionWidth = payload.resolution.width;
-      if (payload.resolution.height) payload.resolutionHeight = payload.resolution.height;
+      if (payload.resolution.width)
+        payload.resolutionWidth = payload.resolution.width;
+      if (payload.resolution.height)
+        payload.resolutionHeight = payload.resolution.height;
       delete payload.resolution;
     }
     return payload;
   }
 
   async findAll() {
-    const list = await this.prisma.screen.findMany({ orderBy: { createdAt: 'desc' } });
-    return list.map(s => this.mapScreen(s));
+    const list = await this.prisma.screen.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    return list.map((s) => this.mapScreen(s));
   }
 
   async findOne(id: string) {
@@ -46,7 +50,10 @@ export class ScreensService {
   async update(id: string, data: any) {
     await this.findOne(id);
     const payload = this.prepareScreenData(data);
-    const updated = await this.prisma.screen.update({ where: { id }, data: payload });
+    const updated = await this.prisma.screen.update({
+      where: { id },
+      data: payload,
+    });
     return this.mapScreen(updated);
   }
 
@@ -79,7 +86,9 @@ export class ScreensService {
 
   async pair(code: string, details: any) {
     const payload = this.prepareScreenData(details);
-    const existing = await this.prisma.screen.findUnique({ where: { code: code.toUpperCase() } });
+    const existing = await this.prisma.screen.findUnique({
+      where: { code: code.toUpperCase() },
+    });
     if (existing) {
       const updated = await this.prisma.screen.update({
         where: { id: existing.id },

@@ -21,8 +21,18 @@ export class LogsService {
     const [total, completed, screens] = await Promise.all([
       this.prisma.proofOfPlayLog.count(),
       this.prisma.proofOfPlayLog.count({ where: { status: 'completed' } }),
-      this.prisma.proofOfPlayLog.groupBy({ by: ['screenId'], _count: { id: true }, orderBy: { _count: { id: 'desc' } }, take: 10 }),
+      this.prisma.proofOfPlayLog.groupBy({
+        by: ['screenId'],
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 10,
+      }),
     ]);
-    return { total, completed, interrupted: total - completed, topScreens: screens };
+    return {
+      total,
+      completed,
+      interrupted: total - completed,
+      topScreens: screens,
+    };
   }
 }

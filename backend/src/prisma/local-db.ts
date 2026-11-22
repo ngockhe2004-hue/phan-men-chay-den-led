@@ -141,7 +141,8 @@ function getDefaultData(): LocalDbData {
       {
         id: 'layout-1',
         name: 'Bố cục Sảnh Chính (Đa vùng)',
-        description: 'Video 70% bên trái + Banner ảnh 30% bên phải + Chữ chạy chân trang',
+        description:
+          'Video 70% bên trái + Banner ảnh 30% bên phải + Chữ chạy chân trang',
         width: 1920,
         height: 1080,
         zones: [
@@ -182,7 +183,8 @@ function getDefaultData(): LocalDbData {
             height: 15,
             zIndex: 2,
             type: 'ticker',
-            tickerText: '⭐ CHÀO MỪNG QUÝ KHÁCH — HỆ THỐNG QUẢN TRỊ TRÌNH CHIẾU MÀN HÌNH LED SIGNAGE CMS PRO ⭐',
+            tickerText:
+              '⭐ CHÀO MỪNG QUÝ KHÁCH — HỆ THỐNG QUẢN TRỊ TRÌNH CHIẾU MÀN HÌNH LED SIGNAGE CMS PRO ⭐',
             tickerSpeed: 50,
             tickerBgColor: '#0284c7',
             tickerTextColor: '#ffffff',
@@ -220,7 +222,8 @@ function getDefaultData(): LocalDbData {
         title: 'Video Giới Thiệu Doanh Nghiệp',
         type: 'video',
         url: '/videos/sample-video.mp4',
-        thumbnail: 'https://images.unsplash.com/photo-1542744094-3a31f272c490?w=600&q=80',
+        thumbnail:
+          'https://images.unsplash.com/photo-1542744094-3a31f272c490?w=600&q=80',
         duration: 30,
         sizeLabel: '1.2 MB',
         resolution: '1920x1080',
@@ -233,7 +236,8 @@ function getDefaultData(): LocalDbData {
         title: 'Video TVC Sản Phẩm Mới',
         type: 'video',
         url: '/videos/sample-video-2.mp4',
-        thumbnail: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80',
+        thumbnail:
+          'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&q=80',
         duration: 15,
         sizeLabel: '515 KB',
         resolution: '1920x1080',
@@ -246,7 +250,8 @@ function getDefaultData(): LocalDbData {
         title: 'Poster Ưu Đãi Tháng 10',
         type: 'image',
         url: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200&q=80',
-        thumbnail: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300&q=80',
+        thumbnail:
+          'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300&q=80',
         duration: 10,
         sizeLabel: '340 KB',
         resolution: '1080x1920',
@@ -320,7 +325,14 @@ export class LocalDbStore {
       const val = w[key];
       if (val && typeof val === 'object') {
         if (val.contains !== undefined) {
-          if (!target || !target.toString().toLowerCase().includes(val.contains.toLowerCase())) return false;
+          if (
+            !target ||
+            !target
+              .toString()
+              .toLowerCase()
+              .includes(val.contains.toLowerCase())
+          )
+            return false;
         } else if (val.in !== undefined && Array.isArray(val.in)) {
           if (!val.in.includes(target)) return false;
         } else if (val.equals !== undefined) {
@@ -351,15 +363,21 @@ export class LocalDbStore {
       },
       findUnique: async (args: any) => {
         const list = this.data[collectionName];
-        return list.find((item: any) => this.matchItem(item, args?.where)) || null;
+        return (
+          list.find((item: any) => this.matchItem(item, args?.where)) || null
+        );
       },
       findFirst: async (args?: any) => {
         const list = this.data[collectionName];
-        return list.find((item: any) => this.matchItem(item, args?.where)) || null;
+        return (
+          list.find((item: any) => this.matchItem(item, args?.where)) || null
+        );
       },
       create: async (args: any) => {
         const newItem = {
-          id: args.data.id || `${collectionName}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          id:
+            args.data.id ||
+            `${collectionName}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           ...args.data,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -370,7 +388,9 @@ export class LocalDbStore {
       },
       update: async (args: any) => {
         const list = this.data[collectionName] as any[];
-        const idx = list.findIndex((item: any) => this.matchItem(item, args?.where));
+        const idx = list.findIndex((item: any) =>
+          this.matchItem(item, args?.where),
+        );
         if (idx !== -1) {
           list[idx] = {
             ...list[idx],
@@ -384,7 +404,9 @@ export class LocalDbStore {
       },
       upsert: async (args: any) => {
         const list = this.data[collectionName] as any[];
-        const idx = list.findIndex((item: any) => this.matchItem(item, args?.where));
+        const idx = list.findIndex((item: any) =>
+          this.matchItem(item, args?.where),
+        );
         if (idx !== -1) {
           list[idx] = {
             ...list[idx],
@@ -406,7 +428,9 @@ export class LocalDbStore {
       },
       delete: async (args: any) => {
         const list = this.data[collectionName] as any[];
-        const idx = list.findIndex((item: any) => this.matchItem(item, args?.where));
+        const idx = list.findIndex((item: any) =>
+          this.matchItem(item, args?.where),
+        );
         if (idx !== -1) {
           const removed = list.splice(idx, 1)[0];
           this.save();

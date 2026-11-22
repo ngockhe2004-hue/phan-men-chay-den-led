@@ -1,4 +1,16 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { MediaService } from './media.service';
@@ -18,10 +30,14 @@ export class MediaController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) { return this.mediaService.findOne(id); }
+  findOne(@Param('id') id: string) {
+    return this.mediaService.findOne(id);
+  }
 
   @Post()
-  create(@Body() body: any) { return this.mediaService.create(body); }
+  create(@Body() body: any) {
+    return this.mediaService.create(body);
+  }
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
@@ -41,10 +57,14 @@ export class MediaController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() body: any) { return this.mediaService.update(id, body); }
+  update(@Param('id') id: string, @Body() body: any) {
+    return this.mediaService.update(id, body);
+  }
 
   @Delete(':id')
-  remove(@Param('id') id: string) { return this.mediaService.remove(id); }
+  remove(@Param('id') id: string) {
+    return this.mediaService.remove(id);
+  }
 
   private formatSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;

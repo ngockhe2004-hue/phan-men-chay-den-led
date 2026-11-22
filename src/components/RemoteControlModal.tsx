@@ -230,22 +230,20 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
   // NÚT ĐIỀU KHIỂN PHÁT / NGỪNG PHÁT / CHỜ PHÁT
   // ----------------------------------------------------
 
-  // 1. NÚT PHÁT (PHÁT NGAY LẬP TỨC):
-  // - Cho hình ấy chiếu NGAY LẬP TỨC
-  // - Chuyển trạng thái sang 'Đang phát'
-  // - Bỏ khỏi danh sách 'Không phát'
+  // 1. NÚT PHÁT (PHÁT NGAY LẬP TỨC / TIẾP TỤC PHÁT):
+  // - Cho hình/video ấy chiếu NGAY LẬP TỨC trên màn hình
+  // - Bật enabled = true, gỡ khỏi danh sách tắt
+  // - Tự động đồng bộ Realtime xuống màn hình LED mà không cần chờ bấm Lưu
   const handlePlayImmediately = (item: ScreenMediaItem) => {
-    // Gỡ khỏi disabled
-    setDisabledMediaIds(prev => prev.filter(id => id !== item.media.id));
+    const updatedDisabled = disabledMediaIds.filter(id => id !== item.media.id);
+    setDisabledMediaIds(updatedDisabled);
     
-    // Đặt làm active media của zone này ngay lập tức
     setActiveMediaByZone(prev => ({
       ...prev,
       [item.zoneId]: item.media.id,
     }));
 
-    // Cập nhật enabled = true trong editableZones
-    setEditableZones(prev => prev.map(z => {
+    const updatedZones = editableZones.map(z => {
       if (z.id === item.zoneId) {
         return {
           ...z,
@@ -258,22 +256,27 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
         };
       }
       return z;
-    }));
+    });
 
-    setHasUnsavedChanges(true);
-    showNotice(`▶️ ĐANG PHÁT NGAY: "${item.media.title}" trên ${item.zoneName}!`);
+    setEditableZones(updatedZones);
+    saveZonesToStorage(updatedZones, updatedDisabled);
+    storageService.sendRemoteCommand(screen.id, { 
+      type: 'switch_media', 
+      value: { zoneId: item.zoneId, mediaId: item.media.id }
+    });
+
+    showNotice(`▶️ ĐANG PHÁT TRỰC TIẾP: "${item.media.title}" trên ${item.zoneName}!`);
   };
 
-  // 2. NÚT NGỪNG PHÁT:
-  // - Cho hình ấy KHÔNG ĐƯỢC CHIẾU NỮA
-  // - Chuyển trạng thái sang 'Không phát'
-  // - Nếu đang chiếu, đẩy mục khác đang chờ lên chiếu thay thế
+  // 2. NÚT TẠM DỪNG / NGỪNG PHÁT:
+  // - Tạm ngưng chiếu tệp này
+  // - Nếu có các tệp khác, tự động chuyển sang tệp kế tiếp đang chờ
+  // - Tự động đồng bộ Realtime xuống màn hình LED
   const handleStopPlayback = (item: ScreenMediaItem) => {
-    // Thêm vào danh sách disabled
-    setDisabledMediaIds(prev => Array.from(new Set([...prev, item.media.id])));
+    const updatedDisabled = Array.from(new Set([...disabledMediaIds, item.media.id]));
+    setDisabledMediaIds(updatedDisabled);
 
-    // Cập nhật enabled = false trong editableZones
-    setEditableZones(prev => prev.map(z => {
+    const updatedZones = editableZones.map(z => {
       if (z.id === item.zoneId) {
         return {
           ...z,
@@ -286,12 +289,12 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
         };
       }
       return z;
-    }));
+    });
 
     // Nếu item này đang phát, chuyển sang item tiếp theo đang chờ phát
     if (activeMediaByZone[item.zoneId] === item.media.id) {
       const remainingEnabled = screenMediaList.filter(
-        s => s.zoneId === item.zoneId && s.media.id !== item.media.id && !disabledMediaIds.includes(s.media.id)
+        s => s.zoneId === item.zoneId && s.media.id !== item.media.id && !updatedDisabled.includes(s.media.id)
       );
       if (remainingEnabled.length > 0) {
         setActiveMediaByZone(prev => ({
@@ -307,16 +310,23 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
       }
     }
 
-    setHasUnsavedChanges(true);
-    showNotice(`⏸️ ĐÃ NGỪNG PHÁT: "${item.media.title}" (Hình này sẽ không được chiếu nữa)`);
+    setEditableZones(updatedZones);
+    saveZonesToStorage(updatedZones, updatedDisabled);
+    storageService.sendRemoteCommand(screen.id, { 
+      type: 'pause_media', 
+      value: { zoneId: item.zoneId, mediaId: item.media.id }
+    });
+
+    showNotice(`⏸️ ĐÃ TẠM DỪNG: "${item.media.title}". Bấm "Tiếp tục phát" để phát lại bất cứ lúc nào.`);
   };
 
   // 3. NÚT ĐƯA VÀO CHỜ PHÁT:
   // - Chuyển từ 'Không phát' sang 'Chờ phát' (được xếp vào hàng đợi phát tuần tự)
   const handleSetWaiting = (item: ScreenMediaItem) => {
-    setDisabledMediaIds(prev => prev.filter(id => id !== item.media.id));
+    const updatedDisabled = disabledMediaIds.filter(id => id !== item.media.id);
+    setDisabledMediaIds(updatedDisabled);
 
-    setEditableZones(prev => prev.map(z => {
+    const updatedZones = editableZones.map(z => {
       if (z.id === item.zoneId) {
         return {
           ...z,
@@ -329,14 +339,16 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
         };
       }
       return z;
-    }));
+    });
 
-    setHasUnsavedChanges(true);
-    showNotice(`⏱️ ĐÃ ĐƯA VÀO CHỜ PHÁT: "${item.media.title}"`);
+    setEditableZones(updatedZones);
+    saveZonesToStorage(updatedZones, updatedDisabled);
+
+    showNotice(`⏱️ ĐÃ ĐƯA VÀO HÀNG CHỜ PHÁT: "${item.media.title}"`);
   };
 
   // Helper lưu và đồng bộ danh sách zone xuống storage & thiết bị
-  const saveZonesToStorage = (zonesToSave: LayoutZone[], disabledIds: string[]) => {
+  function saveZonesToStorage(zonesToSave: LayoutZone[], disabledIds: string[]) {
     const allScreens = storageService.getScreens();
     const latestLayouts = storageService.getLayouts();
     const targetLayout = latestLayouts.find(l => l.id === screen.currentLayoutId) || latestLayouts[0];
@@ -950,7 +962,7 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
                   }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-slate-500" />
-                  <span>Không Phát ({countDisabled})</span>
+                  <span>Tạm Dừng ({countDisabled})</span>
                 </button>
               </div>
 
@@ -1041,7 +1053,7 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
                                   : 'bg-rose-400'
                               }`} />
                               <span>
-                                {item.status === 'playing' ? 'Đang phát' : item.status === 'waiting' ? 'Chờ phát' : 'Không phát'}
+                                {item.status === 'playing' ? 'Đang phát' : item.status === 'waiting' ? 'Chờ phát' : 'Tạm dừng'}
                               </span>
                             </span>
                           </div>
@@ -1112,68 +1124,70 @@ export const RemoteControlModal: React.FC<RemoteControlModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Right: ACTION BUTTONS (PHÁT NGAY / NGỪNG PHÁT / CHỜ PHÁT / XÓA) */}
+                      {/* Right: ACTION BUTTONS (ĐIỀU KHIỂN PHÁT / TẠM DỪNG / TIẾP TỤC / XÓA) */}
                       <div className="flex items-center space-x-1.5 shrink-0 pl-1 border-l border-slate-800">
                         
-                        {/* 1. Nếu đang phát -> Có nút NGỪNG PHÁT */}
+                        {/* 1. Nếu đang phát -> Nút TẠM DỪNG */}
                         {item.status === 'playing' && (
                           <button
                             type="button"
                             onClick={() => handleStopPlayback(item)}
-                            className="px-2.5 py-1.5 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-white text-[11px] font-bold transition-all flex items-center space-x-1 shadow-sm active:scale-95"
-                            title="Ngừng chiếu hình này ngay lập tức (Chuyển sang 'Không phát')"
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-600/90 hover:bg-amber-500 text-white text-[11px] font-bold transition-all flex items-center space-x-1 shadow-sm active:scale-95"
+                            title="Tạm ngừng chiếu tệp này trên màn hình LED"
                           >
                             <Pause className="w-3 h-3 fill-current" />
-                            <span>Ngừng phát</span>
+                            <span>Tạm dừng</span>
                           </button>
                         )}
 
-                        {/* 2. Nếu đang chờ phát -> Có nút PHÁT NGAY + Nút NGỪNG PHÁT */}
+                        {/* 2. Nếu đang chờ phát -> Nút CHIẾU NGAY + Nút TẮT */}
                         {item.status === 'waiting' && (
                           <>
                             <button
                               type="button"
                               onClick={() => handlePlayImmediately(item)}
-                              className="px-2.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-bold transition-all flex items-center space-x-1 shadow-sm active:scale-95"
-                              title="Cho hình này chiếu NGAY LẬP TỨC trên màn hình LED"
+                              className="px-2.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-bold transition-all flex items-center space-x-1 shadow-sm active:scale-95 shadow-cyan-900/30"
+                              title="Ưu tiên chiếu ngay lập tức lên màn hình LED"
                             >
                               <Play className="w-3 h-3 fill-current" />
-                              <span>Phát ngay</span>
+                              <span>Chiếu ngay</span>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => handleStopPlayback(item)}
                               className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-300 text-[11px] font-semibold transition-all"
-                              title="Ngừng phát tệp này"
+                              title="Tạm ngưng tệp này khỏi vòng lặp"
                             >
                               <Pause className="w-3 h-3" />
                             </button>
                           </>
                         )}
 
-                        {/* 3. Nếu đang KHÔNG PHÁT -> Có nút PHÁT NGAY + Nút CHỜ PHÁT */}
+                        {/* 3. Nếu đang TẠM DỪNG (disabled) -> Nút TIẾP TỤC PHÁT + Nút VÀO HÀNG CHỜ */}
                         {item.status === 'disabled' && (
                           <>
                             <button
                               type="button"
                               onClick={() => handlePlayImmediately(item)}
-                              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all flex items-center space-x-1 shadow-sm active:scale-95"
-                              title="Chiếu ngay lập tức lên màn hình LED"
+                              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all flex items-center space-x-1 shadow-sm active:scale-95 shadow-emerald-900/30"
+                              title="Tiếp tục chiếu ngay lập tức lên màn hình LED"
                             >
                               <Play className="w-3 h-3 fill-current" />
-                              <span>Phát ngay</span>
+                              <span>Tiếp tục phát</span>
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={() => handleSetWaiting(item)}
-                              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-semibold transition-all flex items-center space-x-1"
-                              title="Đưa tệp này trở lại danh sách chờ phát tuần tự"
-                            >
-                              <Clock className="w-3 h-3" />
-                              <span>Chờ phát</span>
-                            </button>
+                            {screenMediaList.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetWaiting(item)}
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-semibold transition-all flex items-center space-x-1"
+                                title="Đưa tệp này trở lại danh sách chờ phát tuần tự"
+                              >
+                                <Clock className="w-3 h-3" />
+                                <span>Hàng chờ</span>
+                              </button>
+                            )}
                           </>
                         )}
 
